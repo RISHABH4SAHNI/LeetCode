@@ -6,7 +6,6 @@ Simple LeetCode Repository Organizer
 - Organizes by difficulty with problem numbers
 """
 
-import os
 import re
 import json
 import shutil
@@ -23,7 +22,6 @@ class SimpleLeetCodeOrganizer:
         self.medium_path = self.repo_path / "Medium"
         self.hard_path = self.repo_path / "Hard"
 
-        # Cache file for API responses
         self.cache_file = self.repo_path / "scripts" / "problem_cache.json"
         self.problem_cache = self.load_cache()
 
@@ -71,7 +69,7 @@ class SimpleLeetCodeOrganizer:
                         return match
         return None
 
-    def get_problem_info_from_api(self, function_name: str) -> Optional[Dict]:
+    def get_problem_info_from_leetcode(self, function_name: str) -> Optional[Dict]:
         """Get problem info from LeetCode GraphQL API"""
         if function_name in self.problem_cache:
             return self.problem_cache[function_name]
@@ -105,7 +103,8 @@ class SimpleLeetCodeOrganizer:
             for variation in variations:
                 payload = {
                     "query": query,
-                    "variables": {"titleSlug": variation}
+                    "variables": {"titleSlug"
+                                  : variation}
                 }
 
                 response = requests.post(url, json=payload, timeout=10)
@@ -130,37 +129,6 @@ class SimpleLeetCodeOrganizer:
 
         return None
 
-    def get_problem_info_simple(self, function_name: str) -> Optional[Dict]:
-        """Get problem info using simple lookup table (fallback when API fails)"""
-        known_problems = {
-            'solveSudoku': {'id': '37', 'title': 'Sudoku Solver', 'difficulty': 'Hard'},
-            'isValidSudoku': {'id': '36', 'title': 'Valid Sudoku', 'difficulty': 'Medium'},
-            'maxAverageRatio': {'id': '1792', 'title': 'Maximum Average Pass Ratio', 'difficulty': 'Medium'},
-            'flowerGame': {'id': '3021', 'title': 'Flower Game', 'difficulty': 'Medium'},
-            'longestSubarray': {'id': '1493', 'title': 'Longest Subarray of 1s After Deleting One Element', 'difficulty': 'Medium'},
-            'findDiagonalOrder': {'id': '498', 'title': 'Diagonal Traverse', 'difficulty': 'Medium'},
-            'minimumArea': {'id': '3195', 'title': 'Find the Minimum Area to Cover All Ones I', 'difficulty': 'Easy'},
-            'areaOfMaxDiagonal': {'id': '3000', 'title': 'Maximum Area of Longest Diagonal Rectangle', 'difficulty': 'Easy'},
-            'twoSum': {'id': '1', 'title': 'Two Sum', 'difficulty': 'Easy'},
-            'addTwoNumbers': {'id': '2', 'title': 'Add Two Numbers', 'difficulty': 'Medium'},
-            'lengthOfLongestSubstring': {'id': '3', 'title': 'Longest Substring Without Repeating Characters', 'difficulty': 'Medium'},
-            'isValid': {'id': '20', 'title': 'Valid Parentheses', 'difficulty': 'Easy'},
-            'mergeTwoLists': {'id': '21', 'title': 'Merge Two Sorted Lists', 'difficulty': 'Easy'},
-            'removeNthFromEnd': {'id': '19', 'title': 'Remove Nth Node From End of List', 'difficulty': 'Medium'},
-            'generateParenthesis': {'id': '22', 'title': 'Generate Parentheses', 'difficulty': 'Medium'},
-            'mergeKLists': {'id': '23', 'title': 'Merge k Sorted Lists', 'difficulty': 'Hard'},
-            'swapPairs': {'id': '24', 'title': 'Swap Nodes in Pairs', 'difficulty': 'Medium'},
-            'reverseKGroup': {'id': '25', 'title': 'Reverse Nodes in k-Group', 'difficulty': 'Hard'},
-        }
-
-        return known_problems.get(function_name)
-
-    def get_problem_info(self, function_name: str) -> Optional[Dict]:
-        """Get problem info - try API first, fallback to simple lookup"""
-        # Try API first
-        result = self.get_problem_info_from_api(function_name)
-        return result if result else self.get_problem_info_simple(function_name)
-
     def parse_date_from_filename(self, filename: str) -> datetime:
         """Parse date from filename like '1:09:2025.cpp'"""
         pattern = r'(\d{1,2}):(\d{2}):(\d{4})\.cpp'
@@ -178,7 +146,7 @@ class SimpleLeetCodeOrganizer:
     def organize_file(self, file_path: Path) -> bool:
         """Organize a single file"""
         try:
-            print(f"📁 Processing: {file_path.name}")
+            print(f"Processing: {file_path.name}")
 
             # Read code
             with open(file_path, 'r') as f:
@@ -187,18 +155,18 @@ class SimpleLeetCodeOrganizer:
             # Extract function name
             function_name = self.extract_function_name(code)
             if not function_name:
-                print(f"⚠️ Could not identify function in {file_path.name}")
+                print(f"Could not identify function in {file_path.name}")
                 return False
 
             print(f"🔍 Function found: {function_name}")
 
             # Get problem info from LeetCode
-            problem_info = self.get_problem_info(function_name)
+            problem_info = self.get_problem_info_from_leetcode(function_name)
             if not problem_info:
-                print(f"⚠️ Could not find LeetCode problem for {function_name}")
+                print(f"Could not find LeetCode problem for {function_name}")
                 return False
 
-            print(f"✅ Found: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
+            print(f"Found: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
 
             # Determine target directory
             difficulty = problem_info['difficulty'].lower()
@@ -217,14 +185,14 @@ class SimpleLeetCodeOrganizer:
             # Copy file
             if not target_path.exists():
                 shutil.copy2(file_path, target_path)
-                print(f"📋 Copied to: {target_path.relative_to(self.repo_path)}")
+                print(f"Copied to: {target_path.relative_to(self.repo_path)}")
                 return True
             else:
-                print(f"ℹ️ Already exists: {target_filename}")
+                print(f"Already exists: {target_filename}")
                 return False
 
         except Exception as e:
-            print(f"❌ Error processing {file_path.name}: {e}")
+            print(f"Error processing {file_path.name}: {e}")
             return False
 
     def organize_all(self):

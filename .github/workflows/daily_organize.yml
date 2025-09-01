@@ -1,0 +1,51 @@
+name: Daily LeetCode Organization
+
+on:
+  schedule:
+    # Run daily at 5:30 PM IST (12:00 PM UTC)
+    - cron: '0 12 * * *'
+  
+  push:
+    branches: [ main ]
+    paths:
+      - 'Daily Questions/*.cpp'
+  
+  workflow_dispatch:
+
+jobs:
+  organize:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+    
+    - name: Organize Files
+      run: |
+        python scripts/simple_organizer.py
+    
+    - name: Commit and Push Changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Bot"
+        
+        if [[ -n $(git status --porcelain) ]]; then
+          git add .
+          git commit -m "Auto-organize: $(date +'%Y-%m-%d %H:%M:%S IST')"
+          git push
+          echo "Changes committed and pushed"
+        else
+          echo "No changes to commit"
+        fi
