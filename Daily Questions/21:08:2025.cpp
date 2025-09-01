@@ -3,18 +3,6 @@ using namespace std;
 
 class Solution {
 public:
-    int countConsecutiveOnes(vector<int>& rowData) {
-        int streak = 0, total = 0;
-        for (int it : rowData) {
-            if (it == 0) {
-                streak = 0; 
-            } else {
-                streak++;
-            }
-            total += streak;
-        }
-        return total;
-    }
 
     int numSubmat(vector<vector<int>>& mat) {
         int rows = mat.size();
@@ -33,4 +21,18 @@ public:
         }
         return totalCount;
     }
+
+    int countConsecutiveOnes(vector<int>& rowData) {
+        int streak = 0, total = 0;
+        for (int it : rowData) {
+            if (it == 0) {
+                streak = 0; 
+            } else {
+                streak++;
+            }
+            total += streak;
+        }
+        return total;
+    }
+
 };
