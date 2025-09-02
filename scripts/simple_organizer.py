@@ -10,6 +10,7 @@ import re
 import json
 import shutil
 import requests
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
@@ -139,9 +140,25 @@ class SimpleLeetCodeOrganizer:
         return datetime.min
 
     def sort_daily_files(self) -> list:
-        """Sort daily files by date"""
+        """Sort daily files by date and filter by recent files (last 24 hours)"""
         files = list(self.daily_path.glob("*.cpp"))
-        return sorted(files, key=lambda f: self.parse_date_from_filename(f.name))
+
+        # Filter files modified in the last 24 hours
+        recent_files = []
+        current_time = time.time()
+        one_day_ago = current_time - (24 * 60 * 60)  # 24 hours in seconds
+
+        for file_path in files:
+            # Check file modification time
+            file_mtime = file_path.stat().st_mtime
+            if file_mtime >= one_day_ago:
+                recent_files.append(file_path)
+
+        if recent_files:
+            return sorted(recent_files, key=lambda f: self.parse_date_from_filename(f.name))
+        else:
+            # If no recent files, return empty list instead of all files
+            return []
 
     def organize_file(self, file_path: Path) -> bool:
         """Organize a single file"""
@@ -198,14 +215,22 @@ class SimpleLeetCodeOrganizer:
     def organize_all(self):
         """Organize all files in Daily Questions"""
         print("🚀 Starting Simple LeetCode Organization...")
+        print("🕐 Only processing files modified in the last 24 hours...")
 
-        # Get sorted files by date
+        # Get recent files sorted by date
         sorted_files = self.sort_daily_files()
 
-        print(f"📅 Found {len(sorted_files)} daily files (sorted by date):")
+        if not sorted_files:
+            print("ℹ️  No files modified in the last 24 hours. Nothing to process.")
+            print("🎯 This prevents unnecessary API calls for already processed files.")
+            return
+
+        print(f"📅 Found {len(sorted_files)} recent files (modified in last 24h):")
+        current_time = time.time()
         for file_path in sorted_files:
             date = self.parse_date_from_filename(file_path.name)
-            print(f"   {file_path.name} - {date.strftime('%d/%m/%Y')}")
+            hours_ago = (current_time - file_path.stat().st_mtime) / 3600
+            print(f"   {file_path.name} - {date.strftime('%d/%m/%Y')} (modified {hours_ago:.1f}h ago)")
 
         print("\n" + "="*50)
 
