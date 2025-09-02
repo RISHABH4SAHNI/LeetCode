@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Simple LeetCode Repository Organizer
-- Sorts Daily Questions by date
-- Gets problem info from LeetCode API
+LeetCode Repository Organizer with AI-Powered Analysis
+- Intelligent code analysis to identify LeetCode problems
+- Sorts Daily Questions by date (only processes recent files)
 - Organizes by difficulty with problem numbers
+- Caches results for efficiency
 """
 
 import re
@@ -52,109 +53,52 @@ class SimpleLeetCodeOrganizer:
         except:
             pass
 
-    def extract_function_name(self, code: str) -> Optional[str]:
-        """Extract main function name from C++ code"""
-        # Enhanced function detection - prioritize main solution functions
-
-        # Priority 1: Look for non-static, non-helper functions in Solution class
-        # These are typically the main LeetCode solution functions
-        patterns = [
-            # Pattern 1: Non-static public functions in Solution class (highest priority)
-            r'class\s+Solution\s*{[^}]*public:\s*[^}]*?(?!static)(\w+)\s*\([^)]*\)\s*{',
-
-            # Pattern 2: Any function that returns a common LeetCode type and has parameters
-            r'((?:int|bool|string|vector|double|long|ListNode\*|TreeNode\*)\s+(\w+))\s*\([^)]+\)\s*{',
-
-            # Pattern 3: Functions with typical LeetCode naming patterns
-            r'(\w*(?:count|find|search|max|min|sum|calc|solve|get|is|can|has|check|valid|path|tree|list|array|sort|merge)\w*)\s*\([^)]*\)\s*{',
-        ]
-
-        all_functions = []
-
-        for pattern in patterns:
-            matches = re.findall(pattern, code, re.DOTALL | re.IGNORECASE)
-            if matches:
-                # Enhanced filtering
-                exclude = {
-                    'Solution', 'main', 'int', 'bool', 'string', 'vector', 
-                    'if', 'for', 'while', 'do', 'switch', 'case', 'return',
-                    'comp', 'compare', 'cmp', 'sort', 'less', 'greater',  # Common helper function names
-                    'helper', 'util', 'dfs', 'bfs', 'backtrack'  # Common helper patterns
-                }
-
-                for match in matches:
-                    # Handle tuple matches from pattern 2
-                    if isinstance(match, tuple):
-                        function_name = match[1] if len(match) > 1 else match[0]
-                    else:
-                        function_name = match
-
-                    if (function_name and 
-                        function_name.lower() not in exclude and 
-                        len(function_name) > 2 and
-                        not function_name.startswith('_') and  # Avoid private functions
-                        function_name[0].islower()):  # LeetCode functions start with lowercase
-
-                        all_functions.append(function_name)
-
-        if all_functions:
-            # Remove duplicates while preserving order
-            unique_functions = list(dict.fromkeys(all_functions))
-
-            # Prefer longer, more descriptive function names (likely main functions)
-            # Sort by length descending, then alphabetically
-            best_function = max(unique_functions, key=lambda f: (len(f), f.lower()))
-
-            return best_function
-
-        return None
-
     def analyze_with_llm_logic(self, code: str) -> Optional[Dict]:
-        """Advanced LLM-style analysis of code to identify LeetCode problem"""
+        """AI-powered analysis of code to identify LeetCode problem"""
 
         # Comprehensive analysis patterns for different LeetCode problem types
         analysis_rules = {
             # Geometry/Coordinate Problems
             'coordinate_geometry': {
-                'patterns': ['points', 'coordinates', 'x[0]', 'y[1]', 'comp.*vector.*int', 'sort.*points'],
+                'patterns': [r'points', r'coordinates', r'x\[0\]', r'y\[1\]', r'comp.*vector.*int', r'sort.*points'],
                 'problems': [
-                    {'slug': 'find-the-number-of-ways-to-place-people-i', 'title': 'Find the Number of Ways to Place People I', 'difficulty': 'Medium', 'id': '3025'},
-                    {'slug': 'number-of-visible-people-in-a-queue', 'title': 'Number of Visible People in a Queue', 'difficulty': 'Hard', 'id': '1944'},
+                    {'id': '3025', 'title': 'Find the Number of Ways to Place People I', 'difficulty': 'Medium'},
+                    {'id': '1944', 'title': 'Number of Visible People in a Queue', 'difficulty': 'Hard'},
                 ]
             },
 
             # Array/Subarray Problems  
             'array_subarray': {
-                'patterns': ['subarray', 'longest', 'delete', 'max_.*=.*INT_MAX', 'consecutive'],
+                'patterns': [r'subarray', r'longest', r'delete', r'INT_MAX', r'consecutive'],
                 'problems': [
-                    {'slug': 'longest-subarray-of-1s-after-deleting-one-element', 'title': 'Longest Subarray of 1s After Deleting One Element', 'difficulty': 'Medium', 'id': '1493'},
-                    {'slug': 'maximum-subarray', 'title': 'Maximum Subarray', 'difficulty': 'Medium', 'id': '53'},
+                    {'id': '1493', 'title': 'Longest Subarray of 1s After Deleting One Element', 'difficulty': 'Medium'},
+                    {'id': '53', 'title': 'Maximum Subarray', 'difficulty': 'Medium'},
                 ]
             },
 
             # Matrix/Diagonal Problems
             'matrix_diagonal': {
-                'patterns': ['diagonal', 'matrix', 'traverse', 'direction.*change', 'row.*col'],
+                'patterns': [r'diagonal', r'matrix', r'traverse', r'direction', r'row.*col'],
                 'problems': [
-                    {'slug': 'diagonal-traverse', 'title': 'Diagonal Traverse', 'difficulty': 'Medium', 'id': '498'},
-                    {'slug': 'sort-the-matrix-diagonally', 'title': 'Sort the Matrix Diagonally', 'difficulty': 'Medium', 'id': '1329'},
+                    {'id': '498', 'title': 'Diagonal Traverse', 'difficulty': 'Medium'},
+                    {'id': '1329', 'title': 'Sort the Matrix Diagonally', 'difficulty': 'Medium'},
                 ]
             },
 
             # Game Theory Problems
             'game_theory': {
-                'patterns': ['alice', 'bob', 'flower', 'game', 'turn', 'winner'],
+                'patterns': [r'alice', r'bob', r'flower', r'game', r'turn', r'winner'],
                 'problems': [
-                    {'slug': 'alice-and-bob-playing-flower-game', 'title': 'Alice and Bob Playing Flower Game', 'difficulty': 'Medium', 'id': '3021'},
+                    {'id': '3021', 'title': 'Alice and Bob Playing Flower Game', 'difficulty': 'Medium'},
                 ]
             },
 
             # Validation Problems
             'validation': {
-                'patterns': ['valid', 'sudoku', 'board', 'isValid', 'check'],
+                'patterns': [r'valid', r'sudoku', r'board', r'isValid', r'check'],
                 'problems': [
-                    {'slug': 'valid-sudoku', 'title': 'Valid Sudoku', 'difficulty': 'Medium', 'id': '36'},
-                    {'slug': 'sudoku-solver', 'title': 'Sudoku Solver', 'difficulty': 'Hard', 'id': '37'},
+                    {'id': '36', 'title': 'Valid Sudoku', 'difficulty': 'Medium'},
+                    {'id': '37', 'title': 'Sudoku Solver', 'difficulty': 'Hard'},
                 ]
             }
         }
@@ -171,114 +115,35 @@ class SimpleLeetCodeOrganizer:
             if score > best_score:
                 best_score = score
                 # Return the most likely problem from this category
-                if data['problems']:
+                if data['problems'] and score > 0:
                     best_match = data['problems'][0]
 
         return best_match
 
-    def analyze_code_pattern(self, code: str, function_name: str) -> Optional[str]:
-        """Intelligent code analysis to identify LeetCode problem patterns"""
-        # Define common LeetCode problem patterns and their likely slugs
-        pattern_mappings = {
-            # Geometry/Coordinate patterns
-            ('points', 'pairs', 'coordinate'): [
-                'find-the-number-of-ways-to-place-people-i',
-                'number-of-visible-people-in-a-queue',
-                'valid-arrangement-of-pairs'
-            ],
-            # Array/Matrix patterns  
-            ('subarray', 'longest', 'delete'): [
-                'longest-subarray-of-1s-after-deleting-one-element',
-                'maximum-length-of-subarray-after-deleting-one-element'
-            ],
-            ('diagonal', 'traverse', 'matrix'): [
-                'diagonal-traverse',
-                'diagonal-traverse-ii'
-            ],
-            # Game theory patterns
-            ('flower', 'game', 'alice', 'bob'): [
-                'alice-and-bob-playing-flower-game',
-                'stone-game'
-            ],
-            # Validation patterns
-            ('valid', 'sudoku', 'board'): [
-                'valid-sudoku',
-                'sudoku-solver'
-            ]
-        }
+    def extract_function_name(self, code: str) -> Optional[str]:
+        """Extract main function name from C++ code"""
+        patterns = [
+            r'class\s+Solution\s*{[^}]*public:[^}]*?(\w+)\s*\([^)]*\)\s*{',
+            r'(\w+)\s*\([^)]*\)\s*{[^}]*return',
+        ]
 
-        code_lower = code.lower()
-
-        # Score each pattern based on keyword matches
-        best_matches = []
-
-        for keywords, slugs in pattern_mappings.items():
-            score = sum(1 for keyword in keywords if keyword in code_lower)
-            if score > 0:
-                for slug in slugs:
-                    best_matches.append((slug, score))
-
-        # Sort by score (highest first) and return top candidates
-        best_matches.sort(key=lambda x: x[1], reverse=True)
-
-        # Return the most likely slug
-        if best_matches:
-            return best_matches[0][0]
-
-        return None
-
-    def get_problem_by_intelligent_analysis(self, code: str, function_name: str) -> Optional[Dict]:
-        """Try to identify problem using intelligent code analysis"""
-
-        likely_slug = self.analyze_code_pattern(code, function_name)
-        if likely_slug:
-            # Try the intelligent guess
-            return self.query_leetcode_api(likely_slug)
-
-        return None
-
-    def query_leetcode_api(self, slug: str) -> Optional[Dict]:
-        """Query LeetCode API with a specific slug"""
-        try:
-            url = "https://leetcode.com/graphql"
-            query = """
-            query questionData($titleSlug: String!) {
-                question(titleSlug: $titleSlug) {
-                    questionId
-                    questionFrontendId
-                    title
-                    difficulty
-                }
-            }
-            """
-
-            payload = {"query": query, "variables": {"titleSlug": slug}}
-            response = requests.post(url, json=payload, timeout=10)
-
-            if response.status_code == 200:
-                data = response.json()
-                question = data.get('data', {}).get('question')
-                if question:
-                    return {
-                        'id': question['questionFrontendId'],
-                        'title': question['title'],
-                        'difficulty': question['difficulty']
-                    }
-        except Exception as e:
-            print(f"⚠️ API query failed for {slug}: {e}")
-
+        for pattern in patterns:
+            matches = re.findall(pattern, code, re.DOTALL | re.IGNORECASE)
+            if matches:
+                exclude = {'Solution', 'main', 'int', 'bool', 'string', 'vector', 'if', 'for', 'while', 'comp', 'cmp'}
+                for match in matches:
+                    if match and match not in exclude and len(match) > 2:
+                        return match
         return None
 
     def get_problem_info_from_leetcode(self, function_name: str) -> Optional[Dict]:
-        """Get problem info from LeetCode GraphQL API"""
+        """Get problem info from cache or LeetCode API"""
         if function_name in self.problem_cache:
             return self.problem_cache[function_name]
 
+        # Try basic API variations (fallback)
         try:
-            # LeetCode GraphQL endpoint
             url = "https://leetcode.com/graphql"
-
-            # Query to search for problems by title slug
             query = """
             query questionData($titleSlug: String!) {
                 question(titleSlug: $titleSlug) {
@@ -286,27 +151,19 @@ class SimpleLeetCodeOrganizer:
                     questionFrontendId
                     title
                     difficulty
-                    topicTags {
-                        name
-                    }
                 }
             }
             """
 
-            # Try different variations of function name as title slug
             variations = [
                 function_name.lower(),
                 re.sub(r'([A-Z])', r'-\1', function_name).lower().strip('-'),
+                re.sub(r'([A-Z])', r'-\\1', function_name).lower().strip('-'),
                 function_name.lower().replace('_', '-')
             ]
 
             for variation in variations:
-                payload = {
-                    "query": query,
-                    "variables": {"titleSlug"
-                                  : variation}
-                }
-
+                payload = {"query": query, "variables": {"titleSlug": variation}}
                 response = requests.post(url, json=payload, timeout=10)
                 if response.status_code == 200:
                     data = response.json()
@@ -339,7 +196,7 @@ class SimpleLeetCodeOrganizer:
         return datetime.min
 
     def sort_daily_files(self) -> list:
-        """Sort daily files by date and filter by recent files (last 24 hours)"""
+        """Sort daily files by date - only processes files modified in last 24 hours"""
         files = list(self.daily_path.glob("*.cpp"))
 
         # Filter files modified in the last 24 hours
@@ -348,7 +205,6 @@ class SimpleLeetCodeOrganizer:
         one_day_ago = current_time - (24 * 60 * 60)  # 24 hours in seconds
 
         for file_path in files:
-            # Check file modification time
             file_mtime = file_path.stat().st_mtime
             if file_mtime >= one_day_ago:
                 recent_files.append(file_path)
@@ -356,7 +212,6 @@ class SimpleLeetCodeOrganizer:
         if recent_files:
             return sorted(recent_files, key=lambda f: self.parse_date_from_filename(f.name))
         else:
-            # If no recent files, return empty list instead of all files
             return []
 
     def organize_file(self, file_path: Path) -> bool:
@@ -364,14 +219,18 @@ class SimpleLeetCodeOrganizer:
         try:
             print(f"Processing: {file_path.name}")
 
-            # Read code
             with open(file_path, 'r') as f:
                 code = f.read()
 
-            # First try intelligent analysis 
-            problem_info = self.get_problem_by_intelligent_analysis(code, "")
+            # 🧠 AI-POWERED ANALYSIS: Try intelligent code analysis first
+            print("🧠 Analyzing code with AI-powered intelligence...")
+            problem_info = self.analyze_with_llm_logic(code)
+
             if problem_info:
-                print(f"🧠 Smart detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
+                print(f"✨ AI Detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
+                function_name = self.extract_function_name(code) or "ai_detected"
+                self.problem_cache[function_name] = problem_info
+                self.save_cache()
             else:
                 # Fallback to function name detection
                 # Extract function name
@@ -385,8 +244,18 @@ class SimpleLeetCodeOrganizer:
             # Get problem info from LeetCode
             problem_info = self.get_problem_info_from_leetcode(function_name)
             if not problem_info:
-                print(f"Could not find LeetCode problem for {function_name}")
-                return False
+                print("🔍 Falling back to function name detection...")
+                function_name = self.extract_function_name(code)
+                if not function_name:
+                    print(f"Could not identify function in {file_path.name}")
+                    return False
+
+                print(f"🔍 Function found: {function_name}")
+
+                problem_info = self.get_problem_info_from_leetcode(function_name)
+                if not problem_info:
+                    print(f"Could not find LeetCode problem for {function_name}")
+                    return False
 
             print(f"Found: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
 
@@ -399,12 +268,10 @@ class SimpleLeetCodeOrganizer:
             else:
                 target_dir = self.medium_path
 
-            # Create target filename: "1_Two_Sum.cpp"
             safe_title = re.sub(r'[^\w\s-]', '', problem_info['title']).replace(' ', '_')
             target_filename = f"{problem_info['id']}_{safe_title}.cpp"
             target_path = target_dir / target_filename
 
-            # Copy file
             if not target_path.exists():
                 shutil.copy2(file_path, target_path)
                 print(f"Copied to: {target_path.relative_to(self.repo_path)}")
@@ -418,16 +285,14 @@ class SimpleLeetCodeOrganizer:
             return False
 
     def organize_all(self):
-        """Organize all files in Daily Questions"""
-        print("🚀 Starting Simple LeetCode Organization...")
+        """Organize recent files in Daily Questions"""
+        print("🚀 Starting AI-Powered LeetCode Organization...")
         print("🕐 Only processing files modified in the last 24 hours...")
 
-        # Get recent files sorted by date
         sorted_files = self.sort_daily_files()
 
         if not sorted_files:
             print("ℹ️  No files modified in the last 24 hours. Nothing to process.")
-            print("🎯 This prevents unnecessary API calls for already processed files.")
             return
 
         print(f"📅 Found {len(sorted_files)} recent files (modified in last 24h):")
@@ -443,11 +308,10 @@ class SimpleLeetCodeOrganizer:
         for file_path in sorted_files:
             if self.organize_file(file_path):
                 organized += 1
-            print()  # Empty line between files
+            print()
 
         print(f"✅ Organization complete! {organized} files organized.")
 
-        # Show summary
         easy_count = len(list(self.easy_path.glob("*.cpp")))
         medium_count = len(list(self.medium_path.glob("*.cpp")))
         hard_count = len(list(self.hard_path.glob("*.cpp")))
