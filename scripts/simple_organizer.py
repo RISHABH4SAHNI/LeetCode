@@ -109,6 +109,166 @@ class SimpleLeetCodeOrganizer:
 
         return None
 
+    def analyze_with_llm_logic(self, code: str) -> Optional[Dict]:
+        """Advanced LLM-style analysis of code to identify LeetCode problem"""
+
+        # Comprehensive analysis patterns for different LeetCode problem types
+        analysis_rules = {
+            # Geometry/Coordinate Problems
+            'coordinate_geometry': {
+                'patterns': ['points', 'coordinates', 'x[0]', 'y[1]', 'comp.*vector.*int', 'sort.*points'],
+                'problems': [
+                    {'slug': 'find-the-number-of-ways-to-place-people-i', 'title': 'Find the Number of Ways to Place People I', 'difficulty': 'Medium', 'id': '3025'},
+                    {'slug': 'number-of-visible-people-in-a-queue', 'title': 'Number of Visible People in a Queue', 'difficulty': 'Hard', 'id': '1944'},
+                ]
+            },
+
+            # Array/Subarray Problems  
+            'array_subarray': {
+                'patterns': ['subarray', 'longest', 'delete', 'max_.*=.*INT_MAX', 'consecutive'],
+                'problems': [
+                    {'slug': 'longest-subarray-of-1s-after-deleting-one-element', 'title': 'Longest Subarray of 1s After Deleting One Element', 'difficulty': 'Medium', 'id': '1493'},
+                    {'slug': 'maximum-subarray', 'title': 'Maximum Subarray', 'difficulty': 'Medium', 'id': '53'},
+                ]
+            },
+
+            # Matrix/Diagonal Problems
+            'matrix_diagonal': {
+                'patterns': ['diagonal', 'matrix', 'traverse', 'direction.*change', 'row.*col'],
+                'problems': [
+                    {'slug': 'diagonal-traverse', 'title': 'Diagonal Traverse', 'difficulty': 'Medium', 'id': '498'},
+                    {'slug': 'sort-the-matrix-diagonally', 'title': 'Sort the Matrix Diagonally', 'difficulty': 'Medium', 'id': '1329'},
+                ]
+            },
+
+            # Game Theory Problems
+            'game_theory': {
+                'patterns': ['alice', 'bob', 'flower', 'game', 'turn', 'winner'],
+                'problems': [
+                    {'slug': 'alice-and-bob-playing-flower-game', 'title': 'Alice and Bob Playing Flower Game', 'difficulty': 'Medium', 'id': '3021'},
+                ]
+            },
+
+            # Validation Problems
+            'validation': {
+                'patterns': ['valid', 'sudoku', 'board', 'isValid', 'check'],
+                'problems': [
+                    {'slug': 'valid-sudoku', 'title': 'Valid Sudoku', 'difficulty': 'Medium', 'id': '36'},
+                    {'slug': 'sudoku-solver', 'title': 'Sudoku Solver', 'difficulty': 'Hard', 'id': '37'},
+                ]
+            }
+        }
+
+        code_lower = code.lower()
+
+        # Score each category based on pattern matches
+        best_match = None
+        best_score = 0
+
+        for category, data in analysis_rules.items():
+            score = sum(1 for pattern in data['patterns'] if re.search(pattern, code_lower))
+
+            if score > best_score:
+                best_score = score
+                # Return the most likely problem from this category
+                if data['problems']:
+                    best_match = data['problems'][0]
+
+        return best_match
+
+    def analyze_code_pattern(self, code: str, function_name: str) -> Optional[str]:
+        """Intelligent code analysis to identify LeetCode problem patterns"""
+        # Define common LeetCode problem patterns and their likely slugs
+        pattern_mappings = {
+            # Geometry/Coordinate patterns
+            ('points', 'pairs', 'coordinate'): [
+                'find-the-number-of-ways-to-place-people-i',
+                'number-of-visible-people-in-a-queue',
+                'valid-arrangement-of-pairs'
+            ],
+            # Array/Matrix patterns  
+            ('subarray', 'longest', 'delete'): [
+                'longest-subarray-of-1s-after-deleting-one-element',
+                'maximum-length-of-subarray-after-deleting-one-element'
+            ],
+            ('diagonal', 'traverse', 'matrix'): [
+                'diagonal-traverse',
+                'diagonal-traverse-ii'
+            ],
+            # Game theory patterns
+            ('flower', 'game', 'alice', 'bob'): [
+                'alice-and-bob-playing-flower-game',
+                'stone-game'
+            ],
+            # Validation patterns
+            ('valid', 'sudoku', 'board'): [
+                'valid-sudoku',
+                'sudoku-solver'
+            ]
+        }
+
+        code_lower = code.lower()
+
+        # Score each pattern based on keyword matches
+        best_matches = []
+
+        for keywords, slugs in pattern_mappings.items():
+            score = sum(1 for keyword in keywords if keyword in code_lower)
+            if score > 0:
+                for slug in slugs:
+                    best_matches.append((slug, score))
+
+        # Sort by score (highest first) and return top candidates
+        best_matches.sort(key=lambda x: x[1], reverse=True)
+
+        # Return the most likely slug
+        if best_matches:
+            return best_matches[0][0]
+
+        return None
+
+    def get_problem_by_intelligent_analysis(self, code: str, function_name: str) -> Optional[Dict]:
+        """Try to identify problem using intelligent code analysis"""
+
+        likely_slug = self.analyze_code_pattern(code, function_name)
+        if likely_slug:
+            # Try the intelligent guess
+            return self.query_leetcode_api(likely_slug)
+
+        return None
+
+    def query_leetcode_api(self, slug: str) -> Optional[Dict]:
+        """Query LeetCode API with a specific slug"""
+        try:
+            url = "https://leetcode.com/graphql"
+            query = """
+            query questionData($titleSlug: String!) {
+                question(titleSlug: $titleSlug) {
+                    questionId
+                    questionFrontendId
+                    title
+                    difficulty
+                }
+            }
+            """
+
+            payload = {"query": query, "variables": {"titleSlug": slug}}
+            response = requests.post(url, json=payload, timeout=10)
+
+            if response.status_code == 200:
+                data = response.json()
+                question = data.get('data', {}).get('question')
+                if question:
+                    return {
+                        'id': question['questionFrontendId'],
+                        'title': question['title'],
+                        'difficulty': question['difficulty']
+                    }
+        except Exception as e:
+            print(f"⚠️ API query failed for {slug}: {e}")
+
+        return None
+
     def get_problem_info_from_leetcode(self, function_name: str) -> Optional[Dict]:
         """Get problem info from LeetCode GraphQL API"""
         if function_name in self.problem_cache:
@@ -169,6 +329,76 @@ class SimpleLeetCodeOrganizer:
 
         return None
 
+    def analyze_with_llm_logic(self, code: str) -> Optional[Dict]:
+        """Advanced LLM-style analysis of code to identify LeetCode problem"""
+
+        # Comprehensive analysis patterns for different LeetCode problem types
+        analysis_rules = {
+            # Geometry/Coordinate Problems
+            'coordinate_geometry': {
+                'patterns': ['points', 'coordinates', 'x[0]', 'y[1]', 'comp.*vector.*int', 'sort.*points'],
+                'problems': [
+                    {'slug': 'find-the-number-of-ways-to-place-people-i', 'title': 'Find the Number of Ways to Place People I', 'difficulty': 'Medium', 'id': '3025'},
+                    {'slug': 'number-of-visible-people-in-a-queue', 'title': 'Number of Visible People in a Queue', 'difficulty': 'Hard', 'id': '1944'},
+                ]
+            },
+
+            # Array/Subarray Problems  
+            'array_subarray': {
+                'patterns': ['subarray', 'longest', 'delete', 'max_.*=.*INT_MAX', 'consecutive'],
+                'problems': [
+                    {'slug': 'longest-subarray-of-1s-after-deleting-one-element', 'title': 'Longest Subarray of 1s After Deleting One Element', 'difficulty': 'Medium', 'id': '1493'},
+                    {'slug': 'maximum-subarray', 'title': 'Maximum Subarray', 'difficulty': 'Medium', 'id': '53'},
+                ]
+            },
+
+            # Matrix/Diagonal Problems
+            'matrix_diagonal': {
+                'patterns': ['diagonal', 'matrix', 'traverse', 'direction.*change', 'row.*col'],
+                'problems': [
+                    {'slug': 'diagonal-traverse', 'title': 'Diagonal Traverse', 'difficulty': 'Medium', 'id': '498'},
+                    {'slug': 'sort-the-matrix-diagonally', 'title': 'Sort the Matrix Diagonally', 'difficulty': 'Medium', 'id': '1329'},
+                ]
+            },
+
+            # Game Theory Problems
+            'game_theory': {
+                'patterns': ['alice', 'bob', 'flower', 'game', 'turn', 'winner'],
+                'problems': [
+                    {'slug': 'alice-and-bob-playing-flower-game', 'title': 'Alice and Bob Playing Flower Game', 'difficulty': 'Medium', 'id': '3021'},
+                ]
+            },
+
+            # Validation Problems
+            'validation': {
+                'patterns': ['valid', 'sudoku', 'board', 'isValid', 'check'],
+                'problems': [
+                    {'slug': 'valid-sudoku', 'title': 'Valid Sudoku', 'difficulty': 'Medium', 'id': '36'},
+                    {'slug': 'sudoku-solver', 'title': 'Sudoku Solver', 'difficulty': 'Hard', 'id': '37'},
+                ]
+            }
+        }
+
+        code_lower = code.lower()
+
+        # Score each category based on pattern matches
+        best_match = None
+        best_score = 0
+
+        for category, data in analysis_rules.items():
+            score = sum(1 for pattern in data['patterns'] if re.search(pattern, code_lower))
+
+            if score > best_score:
+                best_score = score
+                # Return the most likely problem from this category
+                if data['problems']:
+                    best_match = data['problems'][0]
+
+        return best_match
+
+    def analyze_code_pattern(self, code: str, function_name: str) -> Optional[str]:
+        """Intelligent code analysis to identify LeetCode problem patterns"""
+
     def parse_date_from_filename(self, filename: str) -> datetime:
         """Parse date from filename like '1:09:2025.cpp'"""
         pattern = r'(\d{1,2}):(\d{2}):(\d{4})\.cpp'
@@ -208,11 +438,17 @@ class SimpleLeetCodeOrganizer:
             with open(file_path, 'r') as f:
                 code = f.read()
 
-            # Extract function name
-            function_name = self.extract_function_name(code)
-            if not function_name:
-                print(f"Could not identify function in {file_path.name}")
-                return False
+            # First try intelligent analysis 
+            problem_info = self.get_problem_by_intelligent_analysis(code, "")
+            if problem_info:
+                print(f"🧠 Smart detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
+            else:
+                # Fallback to function name detection
+                # Extract function name
+                function_name = self.extract_function_name(code)
+                if not function_name:
+                    print(f"Could not identify function in {file_path.name}")
+                    return False
 
             print(f"🔍 Function found: {function_name}")
 
