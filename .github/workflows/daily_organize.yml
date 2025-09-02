@@ -2,14 +2,15 @@ name: Daily LeetCode Organization
 
 on:
   schedule:
-    # Run daily at 5:30 PM IST (12:00 PM UTC)
-    - cron: '0 12 * * *'
-  
+    # Run daily at 2:35 AM IST (21:05 PM UTC)
+    - cron: '5 21 * * *'
+
   push:
+  
     branches: [ main ]
     paths:
       - 'Daily Questions/*.cpp'
-  
+
   workflow_dispatch:
 
 jobs:
