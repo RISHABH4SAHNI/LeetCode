@@ -54,20 +54,59 @@ class SimpleLeetCodeOrganizer:
 
     def extract_function_name(self, code: str) -> Optional[str]:
         """Extract main function name from C++ code"""
-        # Look for main function in Solution class
+        # Enhanced function detection - prioritize main solution functions
+
+        # Priority 1: Look for non-static, non-helper functions in Solution class
+        # These are typically the main LeetCode solution functions
         patterns = [
-            r'class\s+Solution\s*{[^}]*public:[^}]*?(\w+)\s*\([^)]*\)\s*{',
-            r'(\w+)\s*\([^)]*\)\s*{[^}]*return',
+            # Pattern 1: Non-static public functions in Solution class (highest priority)
+            r'class\s+Solution\s*{[^}]*public:\s*[^}]*?(?!static)(\w+)\s*\([^)]*\)\s*{',
+
+            # Pattern 2: Any function that returns a common LeetCode type and has parameters
+            r'((?:int|bool|string|vector|double|long|ListNode\*|TreeNode\*)\s+(\w+))\s*\([^)]+\)\s*{',
+
+            # Pattern 3: Functions with typical LeetCode naming patterns
+            r'(\w*(?:count|find|search|max|min|sum|calc|solve|get|is|can|has|check|valid|path|tree|list|array|sort|merge)\w*)\s*\([^)]*\)\s*{',
         ]
+
+        all_functions = []
 
         for pattern in patterns:
             matches = re.findall(pattern, code, re.DOTALL | re.IGNORECASE)
             if matches:
-                # Filter out common non-function words
-                exclude = {'Solution', 'main', 'int', 'bool', 'string', 'vector', 'if', 'for', 'while'}
+                # Enhanced filtering
+                exclude = {
+                    'Solution', 'main', 'int', 'bool', 'string', 'vector', 
+                    'if', 'for', 'while', 'do', 'switch', 'case', 'return',
+                    'comp', 'compare', 'cmp', 'sort', 'less', 'greater',  # Common helper function names
+                    'helper', 'util', 'dfs', 'bfs', 'backtrack'  # Common helper patterns
+                }
+
                 for match in matches:
-                    if match and match not in exclude and len(match) > 2:
-                        return match
+                    # Handle tuple matches from pattern 2
+                    if isinstance(match, tuple):
+                        function_name = match[1] if len(match) > 1 else match[0]
+                    else:
+                        function_name = match
+
+                    if (function_name and 
+                        function_name.lower() not in exclude and 
+                        len(function_name) > 2 and
+                        not function_name.startswith('_') and  # Avoid private functions
+                        function_name[0].islower()):  # LeetCode functions start with lowercase
+
+                        all_functions.append(function_name)
+
+        if all_functions:
+            # Remove duplicates while preserving order
+            unique_functions = list(dict.fromkeys(all_functions))
+
+            # Prefer longer, more descriptive function names (likely main functions)
+            # Sort by length descending, then alphabetically
+            best_function = max(unique_functions, key=lambda f: (len(f), f.lower()))
+
+            return best_function
+
         return None
 
     def get_problem_info_from_leetcode(self, function_name: str) -> Optional[Dict]:
