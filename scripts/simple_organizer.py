@@ -53,6 +53,70 @@ class SimpleLeetCodeOrganizer:
         except:
             pass
 
+    def get_commit_info_for_file(self, file_path: Path) -> Optional[Dict]:
+        """Extract LeetCode problem info from git commit message"""
+        try:
+            import subprocess
+
+            # Get the most recent commit that modified this file
+            result = subprocess.run([
+                'git', 'log', '-n', '1', '--pretty=format:%s', '--', str(file_path)
+            ], capture_output=True, text=True, cwd=self.repo_path)
+
+            if result.returncode != 0:
+                return None
+
+            commit_message = result.stdout.strip()
+            print(f"📝 Found commit: {commit_message}")
+
+            return self.parse_commit_message(commit_message)
+
+        except Exception as e:
+            print(f"⚠️ Git commit analysis failed: {e}")
+            return None
+
+    def parse_commit_message(self, message: str) -> Optional[Dict]:
+        """Parse commit message to extract LeetCode problem details"""
+
+        # Common patterns in LeetCode commit messages
+        patterns = [
+            # Pattern 1: "Daily Question - 03:09:2025 3027. Find the Number of Ways to Place People II"
+            r'(?:Daily Question.*?)?(\d+)\.\s*(.+?)(?:\s*\((\w+)\))?$',
+
+            # Pattern 2: "3027. Find the Number of Ways to Place People II (Medium)"
+            r'(\d+)\.\s*(.+?)\s*\((\w+)\)',
+
+            # Pattern 3: "Solved: 3027 - Find the Number of Ways to Place People II"
+            r'(?:Solved:?\s*)?(\d+)[\s\-]+(.+?)(?:\s*\((\w+)\))?$',
+
+            # Pattern 4: "LeetCode 3027: Find the Number of Ways to Place People II"
+            r'(?:LeetCode\s*)?(\d+):\s*(.+?)(?:\s*\((\w+)\))?$',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                problem_id = match.group(1)
+                title = match.group(2).strip()
+                difficulty = match.group(3) if len(match.groups()) >= 3 and match.group(3) else None
+
+                # Clean up title
+                title = re.sub(r'\s+', ' ', title)  # Normalize whitespace
+                title = title.strip('. -')  # Remove trailing punctuation
+
+                result = {
+                    'id': problem_id,
+                    'title': title,
+                    'difficulty': difficulty.capitalize() if difficulty else 'Unknown',
+                    'source': 'commit_message'
+                }
+
+                print(f"✅ Parsed: #{result['id']} - {result['title']} ({result['difficulty']})")
+                return result
+
+        print(f"❌ Could not parse commit message: {message}")
+        return None
+
     def analyze_with_llm_logic(self, code: str) -> Optional[Dict]:
         """AI-powered analysis of code to identify LeetCode problem"""
 
@@ -219,43 +283,43 @@ class SimpleLeetCodeOrganizer:
         try:
             print(f"Processing: {file_path.name}")
 
-            with open(file_path, 'r') as f:
-                code = f.read()
-
-            # 🧠 AI-POWERED ANALYSIS: Try intelligent code analysis first
-            print("🧠 Analyzing code with AI-powered intelligence...")
-            problem_info = self.analyze_with_llm_logic(code)
+            # 🎯 PRIMARY METHOD: Git commit analysis (most reliable)
+            print("🎯 Checking git commit message...")
+            problem_info = self.get_commit_info_for_file(file_path)
 
             if problem_info:
-                print(f"✨ AI Detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
-                function_name = self.extract_function_name(code) or "ai_detected"
+                print(f"📝 Git commit detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
+                # Cache the result
+                function_name = self.extract_function_name(open(file_path, 'r').read()) or "git_detected"
                 self.problem_cache[function_name] = problem_info
                 self.save_cache()
             else:
-                # Fallback to function name detection
-                # Extract function name
-                function_name = self.extract_function_name(code)
-                if not function_name:
-                    print(f"Could not identify function in {file_path.name}")
-                    return False
+                with open(file_path, 'r') as f:
+                    code = f.read()
 
-            print(f"🔍 Function found: {function_name}")
+                    # 🧠 SECONDARY METHOD: AI-powered code analysis 
+                    print("🧠 Falling back to AI code analysis...")
+                    problem_info = self.analyze_with_llm_logic(code)
 
-            # Get problem info from LeetCode
-            problem_info = self.get_problem_info_from_leetcode(function_name)
+                    if problem_info:
+                        print(f"✨ AI Detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
+                        function_name = self.extract_function_name(code) or "ai_detected"
+                        self.problem_cache[function_name] = problem_info
+                        self.save_cache()
+                    else:
+                        # 🔍 TERTIARY METHOD: Function name + LeetCode API
+                        print("🔍 Final fallback: function name detection...")
+                        function_name = self.extract_function_name(code)
+                        if not function_name:
+                            print(f"Could not identify function in {file_path.name}")
+                            return False
+
+                        print(f"🔍 Function found: {function_name}")
+                        problem_info = self.get_problem_info_from_leetcode(function_name)
+
             if not problem_info:
-                print("🔍 Falling back to function name detection...")
-                function_name = self.extract_function_name(code)
-                if not function_name:
-                    print(f"Could not identify function in {file_path.name}")
-                    return False
-
-                print(f"🔍 Function found: {function_name}")
-
-                problem_info = self.get_problem_info_from_leetcode(function_name)
-                if not problem_info:
-                    print(f"Could not find LeetCode problem for {function_name}")
-                    return False
+                print(f"❌ Could not identify LeetCode problem with any method")
+                return False
 
             print(f"Found: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
 

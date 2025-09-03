@@ -1,8 +1,9 @@
 {
   "numberOfPairs": {
-    "id": "3025",
-    "title": "Find the Number of Ways to Place People I",
-    "difficulty": "Medium"
+    "id": "3027",
+    "title": "Find the Number of Ways to Place People II",
+    "difficulty": "Medium",
+    "source": "git_commit"
   },
   "ai_detected": {
     "id": "3025",
