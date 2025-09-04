@@ -65,5 +65,11 @@
     "id": "3021",
     "title": "Alice and Bob Playing Flower Game",
     "difficulty": "Medium"
+  },
+  "findClosest": {
+    "id": "3516",
+    "title": "Find Closest Person",
+    "difficulty": "Unknown",
+    "source": "commit_message"
   }
 }
