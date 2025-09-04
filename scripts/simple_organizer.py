@@ -323,6 +323,15 @@ class SimpleLeetCodeOrganizer:
 
             print(f"Found: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
 
+            # Check if this problem already exists in any difficulty folder
+            problem_id = problem_info['id']
+            existing_file = self.find_existing_problem(problem_id)
+
+            if existing_file:
+                print(f"⚠️  Problem #{problem_id} already exists as: {existing_file.relative_to(self.repo_path)}")
+                print(f"   Skipping to avoid duplicates.")
+                return False
+
             # Determine target directory
             difficulty = problem_info['difficulty'].lower()
             if difficulty == 'easy':
@@ -331,6 +340,11 @@ class SimpleLeetCodeOrganizer:
                 target_dir = self.hard_path
             else:
                 target_dir = self.medium_path
+
+            safe_title = re.sub(r'[^\\w\\s-]', '', problem_info['title']).replace(' ', '_')
+            # Limit title length to avoid very long filenames
+            if len(safe_title) > 50:
+                safe_title = safe_title[:50].rstrip('_')
 
             safe_title = re.sub(r'[^\w\s-]', '', problem_info['title']).replace(' ', '_')
             target_filename = f"{problem_info['id']}_{safe_title}.cpp"
@@ -347,6 +361,62 @@ class SimpleLeetCodeOrganizer:
         except Exception as e:
             print(f"Error processing {file_path.name}: {e}")
             return False
+
+    def find_existing_problem(self, problem_id: str) -> Optional[Path]:
+        """Check if a problem with the given ID already exists in any difficulty folder"""
+        for folder in [self.easy_path, self.medium_path, self.hard_path]:
+            if folder.exists():
+                for existing_file in folder.glob(f"{problem_id}_*.cpp"):
+                    return existing_file
+                # Also check for files that start with the problem ID
+                for existing_file in folder.glob("*.cpp"):
+                    if existing_file.name.startswith(f"{problem_id}_"):
+                        return existing_file
+        return None
+
+    def cleanup_duplicates(self):
+        """Remove duplicate files based on problem ID"""
+        print("\n🧹 Checking for duplicate files...")
+
+        problem_files = {}  # problem_id -> list of files
+
+        # Collect all files by problem ID
+        for folder in [self.easy_path, self.medium_path, self.hard_path]:
+            if folder.exists():
+                for file_path in folder.glob("*.cpp"):
+                    # Extract problem ID from filename
+                    match = re.match(r'^(\d+)_', file_path.name)
+                    if match:
+                        problem_id = match.group(1)
+                        if problem_id not in problem_files:
+                            problem_files[problem_id] = []
+                        problem_files[problem_id].append(file_path)
+
+        # Find and remove duplicates
+        duplicates_removed = 0
+        for problem_id, files in problem_files.items():
+            if len(files) > 1:
+                print(f"\n📋 Problem #{problem_id} has {len(files)} copies:")
+                for i, file_path in enumerate(files):
+                    print(f"   {i+1}. {file_path.relative_to(self.repo_path)}")
+
+                # Keep the one with the shortest, most standard filename
+                files_sorted = sorted(files, key=lambda f: (len(f.name), f.name))
+                keep_file = files_sorted[0]
+
+                print(f"   ✅ Keeping: {keep_file.relative_to(self.repo_path)}")
+
+                # Remove duplicates
+                for file_path in files[1:]:
+                    if file_path != keep_file:
+                        print(f"   🗑️  Removing: {file_path.relative_to(self.repo_path)}")
+                        file_path.unlink()
+                        duplicates_removed += 1
+
+        if duplicates_removed > 0:
+            print(f"\n✅ Removed {duplicates_removed} duplicate files")
+        else:
+            print("\n✅ No duplicates found")
 
     def organize_all(self):
         """Organize recent files in Daily Questions"""
@@ -375,6 +445,9 @@ class SimpleLeetCodeOrganizer:
             print()
 
         print(f"✅ Organization complete! {organized} files organized.")
+
+        # Clean up any duplicates that might exist
+        self.cleanup_duplicates()
 
         easy_count = len(list(self.easy_path.glob("*.cpp")))
         medium_count = len(list(self.medium_path.glob("*.cpp")))
