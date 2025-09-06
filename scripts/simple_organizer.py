@@ -17,12 +17,13 @@ from datetime import datetime
 from typing import Dict, Optional
 
 class SimpleLeetCodeOrganizer:
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: str, auto_mode: bool = False):
         self.repo_path = Path(repo_path)
         self.daily_path = self.repo_path / "Daily Questions"
         self.easy_path = self.repo_path / "Easy"
         self.medium_path = self.repo_path / "Medium"
         self.hard_path = self.repo_path / "Hard"
+        self.auto_mode = auto_mode  # Process all files, not just recent ones
 
         self.cache_file = self.repo_path / "scripts" / "problem_cache.json"
         self.problem_cache = self.load_cache()
@@ -260,23 +261,28 @@ class SimpleLeetCodeOrganizer:
         return datetime.min
 
     def sort_daily_files(self) -> list:
-        """Sort daily files by date - only processes files modified in last 24 hours"""
+        """Sort daily files by date - in auto mode processes all files, otherwise only recent ones"""
         files = list(self.daily_path.glob("*.cpp"))
 
-        # Filter files modified in the last 24 hours
-        recent_files = []
-        current_time = time.time()
-        one_day_ago = current_time - (24 * 60 * 60)  # 24 hours in seconds
-
-        for file_path in files:
-            file_mtime = file_path.stat().st_mtime
-            if file_mtime >= one_day_ago:
-                recent_files.append(file_path)
-
-        if recent_files:
-            return sorted(recent_files, key=lambda f: self.parse_date_from_filename(f.name))
+        if self.auto_mode:
+            # In auto mode, process all files
+            print("🤖 Auto mode: Processing all files in Daily Questions folder")
+            return sorted(files, key=lambda f: self.parse_date_from_filename(f.name))
         else:
-            return []
+            # Original behavior: Filter files modified in the last 24 hours
+            recent_files = []
+            current_time = time.time()
+            one_day_ago = current_time - (24 * 60 * 60)  # 24 hours in seconds
+
+            for file_path in files:
+                file_mtime = file_path.stat().st_mtime
+                if file_mtime >= one_day_ago:
+                    recent_files.append(file_path)
+
+            if recent_files:
+                return sorted(recent_files, key=lambda f: self.parse_date_from_filename(f.name))
+            else:
+                return []
 
     def organize_file(self, file_path: Path) -> bool:
         """Organize a single file"""
@@ -352,10 +358,12 @@ class SimpleLeetCodeOrganizer:
 
             if not target_path.exists():
                 shutil.copy2(file_path, target_path)
-                print(f"Copied to: {target_path.relative_to(self.repo_path)}")
+                print(f"✅ Copied to: {target_path.relative_to(self.repo_path)}")
+                print(f"📋 Original kept: {file_path.relative_to(self.repo_path)}")
                 return True
             else:
-                print(f"Already exists: {target_filename}")
+                print(f"⚠️  Already exists: {target_filename}")
+                print(f"📋 Original kept: {file_path.relative_to(self.repo_path)}")
                 return False
 
         except Exception as e:
@@ -419,22 +427,37 @@ class SimpleLeetCodeOrganizer:
             print("\n✅ No duplicates found")
 
     def organize_all(self):
-        """Organize recent files in Daily Questions"""
-        print("🚀 Starting AI-Powered LeetCode Organization...")
-        print("🕐 Only processing files modified in the last 24 hours...")
+        """Organize files in Daily Questions"""
+        if self.auto_mode:
+            print("🤖 Starting Automated LeetCode Organization...")
+            print("📁 Processing all files in Daily Questions folder...")
+            print("📋 Note: Files will be COPIED to difficulty folders (originals kept in Daily Questions)")
+        else:
+            print("🚀 Starting AI-Powered LeetCode Organization...")
+            print("🕐 Only processing files modified in the last 24 hours...")
+            print("📋 Note: Files will be COPIED to difficulty folders (originals kept in Daily Questions)")
 
         sorted_files = self.sort_daily_files()
 
         if not sorted_files:
-            print("ℹ️  No files modified in the last 24 hours. Nothing to process.")
+            if self.auto_mode:
+                print("ℹ️  No files found in Daily Questions folder.")
+            else:
+                print("ℹ️  No files modified in the last 24 hours. Nothing to process.")
             return
 
-        print(f"📅 Found {len(sorted_files)} recent files (modified in last 24h):")
-        current_time = time.time()
-        for file_path in sorted_files:
-            date = self.parse_date_from_filename(file_path.name)
-            hours_ago = (current_time - file_path.stat().st_mtime) / 3600
-            print(f"   {file_path.name} - {date.strftime('%d/%m/%Y')} (modified {hours_ago:.1f}h ago)")
+        if self.auto_mode:
+            print(f"📁 Found {len(sorted_files)} files to process:")
+            for file_path in sorted_files:
+                date = self.parse_date_from_filename(file_path.name)
+                print(f"   {file_path.name} - {date.strftime('%d/%m/%Y')}")
+        else:
+            print(f"📅 Found {len(sorted_files)} recent files (modified in last 24h):")
+            current_time = time.time()
+            for file_path in sorted_files:
+                date = self.parse_date_from_filename(file_path.name)
+                hours_ago = (current_time - file_path.stat().st_mtime) / 3600
+                print(f"   {file_path.name} - {date.strftime('%d/%m/%Y')} (modified {hours_ago:.1f}h ago)")
 
         print("\n" + "="*50)
 
@@ -444,7 +467,8 @@ class SimpleLeetCodeOrganizer:
                 organized += 1
             print()
 
-        print(f"✅ Organization complete! {organized} files organized.")
+        print(f"✅ Organization complete! {organized} files copied to difficulty folders.")
+        print(f"📋 Original files remain in Daily Questions folder with their original names.")
 
         # Clean up any duplicates that might exist
         self.cleanup_duplicates()
@@ -461,7 +485,14 @@ class SimpleLeetCodeOrganizer:
 
 if __name__ == "__main__":
     import sys
-    repo_path = sys.argv[1] if len(sys.argv) > 1 else "."
-
-    organizer = SimpleLeetCodeOrganizer(repo_path)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='LeetCode Repository Organizer')
+    parser.add_argument('repo_path', nargs='?', default='.', help='Path to the repository')
+    parser.add_argument('--auto-mode', action='store_true', 
+                       help='Process all files in Daily Questions folder (not just recent ones)')
+    
+    args = parser.parse_args()
+    
+    organizer = SimpleLeetCodeOrganizer(args.repo_path, auto_mode=args.auto_mode)
     organizer.organize_all()
