@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-LeetCode Repository Organizer with AI-Powered Analysis
-- Intelligent code analysis to identify LeetCode problems
-- Sorts Daily Questions by date (only processes recent files)
+Improved LeetCode Repository Organizer
+- No cache creation
+- Depends on commit message content
+- Uses LeetCode API for accurate difficulty detection
 - Organizes by difficulty with problem numbers
-- Caches results for efficiency
 """
 
 import re
-import json
 import shutil
 import requests
 import time
@@ -16,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
 
-class SimpleLeetCodeOrganizer:
+class ImprovedLeetCodeOrganizer:
     def __init__(self, repo_path: str, auto_mode: bool = False):
         self.repo_path = Path(repo_path)
         self.daily_path = self.repo_path / "Daily Questions"
@@ -25,50 +24,131 @@ class SimpleLeetCodeOrganizer:
         self.hard_path = self.repo_path / "Hard"
         self.auto_mode = auto_mode  # Process all files, not just recent ones
 
-        self.cache_file = self.repo_path / "scripts" / "problem_cache.json"
-        self.problem_cache = self.load_cache()
-
         self.ensure_directories()
 
     def ensure_directories(self):
         """Create necessary directories"""
         for path in [self.daily_path, self.easy_path, self.medium_path, self.hard_path]:
             path.mkdir(exist_ok=True)
-        (self.repo_path / "scripts").mkdir(exist_ok=True)
 
-    def load_cache(self) -> Dict:
-        """Load cached problem information"""
+    def get_problem_difficulty_from_leetcode(self, problem_id: str) -> Optional[str]:
+        """Get problem difficulty from LeetCode API using problem ID"""
         try:
-            if self.cache_file.exists():
-                with open(self.cache_file, 'r') as f:
-                    return json.load(f)
-        except:
-            pass
-        return {}
-
-    def save_cache(self):
-        """Save problem cache"""
-        try:
-            with open(self.cache_file, 'w') as f:
-                json.dump(self.problem_cache, f, indent=2)
-        except:
-            pass
+            print(f"🔍 Querying LeetCode API for problem #{problem_id}...")
+            
+            # LeetCode GraphQL API
+            url = "https://leetcode.com/graphql"
+            query = """
+            query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
+                problemsetQuestionList: questionList(
+                    categorySlug: $categorySlug
+                    limit: $limit
+                    skip: $skip
+                    filters: $filters
+                ) {
+                    questions: data {
+                        questionId
+                        questionFrontendId
+                        title
+                        difficulty
+                    }
+                }
+            }
+            """
+            
+            variables = {
+                "categorySlug": "",
+                "skip": 0,
+                "limit": 50,
+                "filters": {
+                    "searchKeywords": problem_id
+                }
+            }
+            
+            payload = {"query": query, "variables": variables}
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'application/json',
+                'Referer': 'https://leetcode.com/problemset/all/'
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                questions = data.get('data', {}).get('problemsetQuestionList', {}).get('questions', [])
+                
+                # Find exact match by problem ID
+                for question in questions:
+                    if question.get('questionFrontendId') == problem_id:
+                        difficulty = question.get('difficulty', '').upper()
+                        print(f"✅ LeetCode API: Problem #{problem_id} → {difficulty}")
+                        return difficulty
+                
+                print(f"⚠️ Problem #{problem_id} not found in search results")
+            else:
+                print(f"⚠️ LeetCode API returned status code: {response.status_code}")
+            
+            # Try alternative approach
+            return self.get_problem_difficulty_alternative(problem_id)
+            
+        except Exception as e:
+            print(f"⚠️ LeetCode API failed for #{problem_id}: {e}")
+            return self.get_problem_difficulty_alternative(problem_id)
+    
+    def get_problem_difficulty_alternative(self, problem_id: str) -> Optional[str]:
+        """Alternative method - fallback for common problems"""
+        # Fallback for some well-known problems
+        known_difficulties = {
+            "1": "EASY",      # Two Sum
+            "2": "MEDIUM",    # Add Two Numbers  
+            "3": "MEDIUM",    # Longest Substring Without Repeating Characters
+            "1317": "EASY",   # Convert Integer to the Sum of Two No-Zero Integers
+            "3027": "HARD",   # Find the Number of Ways to Place People II
+            "1304": "EASY",   # Find N Unique Integers Sum up to Zero
+            "2749": "MEDIUM", # Minimum Operations to Make the Integer Zero
+            "3495": "MEDIUM", # Minimum Operations to Make Array Elements Zero
+        }
+        
+        if problem_id in known_difficulties:
+            difficulty = known_difficulties[problem_id]
+            print(f"✅ Known problem: #{problem_id} → {difficulty}")
+            return difficulty
+        
+        print(f"❌ Could not determine difficulty for problem #{problem_id}")
+        return None
 
     def get_commit_info_for_file(self, file_path: Path) -> Optional[Dict]:
         """Extract LeetCode problem info from git commit message"""
         try:
             import subprocess
 
+            # Make file path relative to repo_path for git command
+            try:
+                relative_path = file_path.relative_to(self.repo_path)
+            except ValueError:
+                # If file_path is not under repo_path, use the full path
+                relative_path = file_path
+
+            print(f"🔍 Checking git log for: {relative_path}")
+
             # Get the most recent commit that modified this file
             result = subprocess.run([
-                'git', 'log', '-n', '1', '--pretty=format:%s', '--', str(file_path)
+                'git', 'log', '-n', '1', '--pretty=format:%s', '--follow', '--', str(relative_path)
             ], capture_output=True, text=True, cwd=self.repo_path)
 
             if result.returncode != 0:
+                print(f"⚠️ Git command failed for {file_path.name}: {result.stderr}")
                 return None
 
             commit_message = result.stdout.strip()
-            print(f"📝 Found commit: {commit_message}")
+            print(f"📝 Found commit: '{commit_message}'")
+
+            if not commit_message:
+                print(f"⚠️ Empty commit message for {file_path.name}")
+                return None
 
             return self.parse_commit_message(commit_message)
 
@@ -78,421 +158,172 @@ class SimpleLeetCodeOrganizer:
 
     def parse_commit_message(self, message: str) -> Optional[Dict]:
         """Parse commit message to extract LeetCode problem details"""
-
+        
         # Common patterns in LeetCode commit messages
         patterns = [
             # Pattern 1: "Daily Question - 03:09:2025 3027. Find the Number of Ways to Place People II"
-            r'(?:Daily Question.*?)?(\d+)\.\s*(.+?)(?:\s*\((\w+)\))?$',
-
+            r'(?:Daily Question.*?)(\d+)\.\s*(.+?)(?:\s*\((\w+)\))?$',
+            
             # Pattern 2: "3027. Find the Number of Ways to Place People II (Medium)"
             r'(\d+)\.\s*(.+?)\s*\((\w+)\)',
-
+            
             # Pattern 3: "Solved: 3027 - Find the Number of Ways to Place People II"
-            r'(?:Solved:?\s*)?(\d+)[\s\-]+(.+?)(?:\s*\((\w+)\))?$',
-
+            r'(?:Solved:?\s*)(\d+)[\s\-]+(.+?)(?:\s*\((\w+)\))?$',
+            
             # Pattern 4: "LeetCode 3027: Find the Number of Ways to Place People II"
-            r'(?:LeetCode\s*)?(\d+):\s*(.+?)(?:\s*\((\w+)\))?$',
+            r'(?:LeetCode\s*)(\d+):\s*(.+?)(?:\s*\((\w+)\))?$',
         ]
 
-        for pattern in patterns:
+        for i, pattern in enumerate(patterns, 1):
             match = re.search(pattern, message, re.IGNORECASE)
             if match:
+                print(f"✅ Matched pattern {i}: {pattern}")
                 problem_id = match.group(1)
                 title = match.group(2).strip()
-                difficulty = match.group(3) if len(match.groups()) >= 3 and match.group(3) else None
+                commit_difficulty = match.group(3) if len(match.groups()) >= 3 and match.group(3) else None
 
                 # Clean up title
                 title = re.sub(r'\s+', ' ', title)  # Normalize whitespace
                 title = title.strip('. -')  # Remove trailing punctuation
 
+                # Get accurate difficulty from LeetCode API
+                print(f"🎯 Extracted from commit: #{problem_id} - {title}")
+                api_difficulty = self.get_problem_difficulty_from_leetcode(problem_id)
+                
+                # Use API difficulty if available, otherwise use commit difficulty
+                if api_difficulty:
+                    difficulty = api_difficulty.capitalize()
+                elif commit_difficulty:
+                    difficulty = commit_difficulty.capitalize()
+                    print(f"⚠️ Using commit difficulty for #{problem_id}: {difficulty}")
+                else:
+                    print(f"❌ No difficulty found for #{problem_id}")
+                    return None
+
                 result = {
                     'id': problem_id,
                     'title': title,
-                    'difficulty': difficulty.capitalize() if difficulty else 'Unknown',
+                    'difficulty': difficulty,
                     'source': 'commit_message'
                 }
 
-                print(f"✅ Parsed: #{result['id']} - {result['title']} ({result['difficulty']})")
+                print(f"✅ Final result: #{result['id']} - {result['title']} ({result['difficulty']})")
                 return result
 
-        print(f"❌ Could not parse commit message: {message}")
+        print(f"❌ Could not parse commit message: '{message}'")
+        print(f"📝 Tried {len(patterns)} patterns")
         return None
-
-    def analyze_with_llm_logic(self, code: str) -> Optional[Dict]:
-        """AI-powered analysis of code to identify LeetCode problem"""
-
-        # Comprehensive analysis patterns for different LeetCode problem types
-        analysis_rules = {
-            # Geometry/Coordinate Problems
-            'coordinate_geometry': {
-                'patterns': [r'points', r'coordinates', r'x\[0\]', r'y\[1\]', r'comp.*vector.*int', r'sort.*points'],
-                'problems': [
-                    {'id': '3025', 'title': 'Find the Number of Ways to Place People I', 'difficulty': 'Medium'},
-                    {'id': '1944', 'title': 'Number of Visible People in a Queue', 'difficulty': 'Hard'},
-                ]
-            },
-
-            # Array/Subarray Problems  
-            'array_subarray': {
-                'patterns': [r'subarray', r'longest', r'delete', r'INT_MAX', r'consecutive'],
-                'problems': [
-                    {'id': '1493', 'title': 'Longest Subarray of 1s After Deleting One Element', 'difficulty': 'Medium'},
-                    {'id': '53', 'title': 'Maximum Subarray', 'difficulty': 'Medium'},
-                ]
-            },
-
-            # Matrix/Diagonal Problems
-            'matrix_diagonal': {
-                'patterns': [r'diagonal', r'matrix', r'traverse', r'direction', r'row.*col'],
-                'problems': [
-                    {'id': '498', 'title': 'Diagonal Traverse', 'difficulty': 'Medium'},
-                    {'id': '1329', 'title': 'Sort the Matrix Diagonally', 'difficulty': 'Medium'},
-                ]
-            },
-
-            # Game Theory Problems
-            'game_theory': {
-                'patterns': [r'alice', r'bob', r'flower', r'game', r'turn', r'winner'],
-                'problems': [
-                    {'id': '3021', 'title': 'Alice and Bob Playing Flower Game', 'difficulty': 'Medium'},
-                ]
-            },
-
-            # Validation Problems
-            'validation': {
-                'patterns': [r'valid', r'sudoku', r'board', r'isValid', r'check'],
-                'problems': [
-                    {'id': '36', 'title': 'Valid Sudoku', 'difficulty': 'Medium'},
-                    {'id': '37', 'title': 'Sudoku Solver', 'difficulty': 'Hard'},
-                ]
-            }
-        }
-
-        code_lower = code.lower()
-
-        # Score each category based on pattern matches
-        best_match = None
-        best_score = 0
-
-        for category, data in analysis_rules.items():
-            score = sum(1 for pattern in data['patterns'] if re.search(pattern, code_lower))
-
-            if score > best_score:
-                best_score = score
-                # Return the most likely problem from this category
-                if data['problems'] and score > 0:
-                    best_match = data['problems'][0]
-
-        return best_match
-
-    def extract_function_name(self, code: str) -> Optional[str]:
-        """Extract main function name from C++ code"""
-        patterns = [
-            r'class\s+Solution\s*{[^}]*public:[^}]*?(\w+)\s*\([^)]*\)\s*{',
-            r'(\w+)\s*\([^)]*\)\s*{[^}]*return',
-        ]
-
-        for pattern in patterns:
-            matches = re.findall(pattern, code, re.DOTALL | re.IGNORECASE)
-            if matches:
-                exclude = {'Solution', 'main', 'int', 'bool', 'string', 'vector', 'if', 'for', 'while', 'comp', 'cmp'}
-                for match in matches:
-                    if match and match not in exclude and len(match) > 2:
-                        return match
-        return None
-
-    def get_problem_info_from_leetcode(self, function_name: str) -> Optional[Dict]:
-        """Get problem info from cache or LeetCode API"""
-        if function_name in self.problem_cache:
-            return self.problem_cache[function_name]
-
-        # Try basic API variations (fallback)
-        try:
-            url = "https://leetcode.com/graphql"
-            query = """
-            query questionData($titleSlug: String!) {
-                question(titleSlug: $titleSlug) {
-                    questionId
-                    questionFrontendId
-                    title
-                    difficulty
-                }
-            }
-            """
-
-            variations = [
-                function_name.lower(),
-                re.sub(r'([A-Z])', r'-\1', function_name).lower().strip('-'),
-                re.sub(r'([A-Z])', r'-\\1', function_name).lower().strip('-'),
-                function_name.lower().replace('_', '-')
-            ]
-
-            for variation in variations:
-                payload = {"query": query, "variables": {"titleSlug": variation}}
-                response = requests.post(url, json=payload, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    question = data.get('data', {}).get('question')
-
-                    if question:
-                        problem_info = {
-                            'id': question['questionFrontendId'],
-                            'title': question['title'],
-                            'difficulty': question['difficulty']
-                        }
-
-                        # Cache the result
-                        self.problem_cache[function_name] = problem_info
-                        self.save_cache()
-                        return problem_info
-
-        except Exception as e:
-            print(f"⚠️ API call failed for {function_name}: {e}")
-
-        return None
-
-    def parse_date_from_filename(self, filename: str) -> datetime:
-        """Parse date from filename like '1:09:2025.cpp'"""
-        pattern = r'(\d{1,2}):(\d{2}):(\d{4})\.cpp'
-        match = re.match(pattern, filename)
-        if match:
-            day, month, year = match.groups()
-            return datetime(int(year), int(month), int(day))
-        return datetime.min
-
-    def sort_daily_files(self) -> list:
-        """Sort daily files by date - in auto mode processes all files, otherwise only recent ones"""
-        files = list(self.daily_path.glob("*.cpp"))
-
-        if self.auto_mode:
-            # In auto mode, process all files
-            print("🤖 Auto mode: Processing all files in Daily Questions folder")
-            return sorted(files, key=lambda f: self.parse_date_from_filename(f.name))
-        else:
-            # Original behavior: Filter files modified in the last 24 hours
-            recent_files = []
-            current_time = time.time()
-            one_day_ago = current_time - (24 * 60 * 60)  # 24 hours in seconds
-
-            for file_path in files:
-                file_mtime = file_path.stat().st_mtime
-                if file_mtime >= one_day_ago:
-                    recent_files.append(file_path)
-
-            if recent_files:
-                return sorted(recent_files, key=lambda f: self.parse_date_from_filename(f.name))
-            else:
-                return []
 
     def organize_file(self, file_path: Path) -> bool:
-        """Organize a single file"""
+        """Organize a single file based on commit message and LeetCode API"""
         try:
-            print(f"Processing: {file_path.name}")
+            print(f"\n📂 Processing: {file_path.name}")
+            print("="*50)
 
-            # 🎯 PRIMARY METHOD: Git commit analysis (most reliable)
-            print("🎯 Checking git commit message...")
+            # Extract problem info from git commit message
             problem_info = self.get_commit_info_for_file(file_path)
 
-            if problem_info:
-                print(f"📝 Git commit detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
-                # Cache the result
-                function_name = self.extract_function_name(open(file_path, 'r').read()) or "git_detected"
-                self.problem_cache[function_name] = problem_info
-                self.save_cache()
-            else:
-                with open(file_path, 'r') as f:
-                    code = f.read()
-
-                    # 🧠 SECONDARY METHOD: AI-powered code analysis 
-                    print("🧠 Falling back to AI code analysis...")
-                    problem_info = self.analyze_with_llm_logic(code)
-
-                    if problem_info:
-                        print(f"✨ AI Detection: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
-                        function_name = self.extract_function_name(code) or "ai_detected"
-                        self.problem_cache[function_name] = problem_info
-                        self.save_cache()
-                    else:
-                        # 🔍 TERTIARY METHOD: Function name + LeetCode API
-                        print("🔍 Final fallback: function name detection...")
-                        function_name = self.extract_function_name(code)
-                        if not function_name:
-                            print(f"Could not identify function in {file_path.name}")
-                            return False
-
-                        print(f"🔍 Function found: {function_name}")
-                        problem_info = self.get_problem_info_from_leetcode(function_name)
-
             if not problem_info:
-                print(f"❌ Could not identify LeetCode problem with any method")
+                print(f"❌ Could not extract problem info from commit message")
                 return False
-
-            print(f"Found: #{problem_info['id']} - {problem_info['title']} ({problem_info['difficulty']})")
+            
+            if not problem_info.get('difficulty'):
+                print(f"❌ Could not determine difficulty for problem #{problem_info['id']}")
+                return False
 
             # Check if this problem already exists in any difficulty folder
-            problem_id = problem_info['id']
-            existing_file = self.find_existing_problem(problem_id)
-
+            existing_file = self.find_existing_problem(problem_info['id'])
             if existing_file:
-                print(f"⚠️  Problem #{problem_id} already exists as: {existing_file.relative_to(self.repo_path)}")
-                print(f"   Skipping to avoid duplicates.")
+                print(f"⚠️ Problem #{problem_info['id']} already exists: {existing_file}")
                 return False
 
-            # Determine target directory
-            difficulty = problem_info['difficulty'].lower()
-            if difficulty == 'easy':
+            # Determine target directory based on difficulty
+            difficulty = problem_info['difficulty'].upper()
+            if difficulty == 'EASY':
                 target_dir = self.easy_path
-            elif difficulty == 'hard':
+            elif difficulty == 'MEDIUM':
+                target_dir = self.medium_path
+            elif difficulty == 'HARD':
                 target_dir = self.hard_path
             else:
-                target_dir = self.medium_path
+                print(f"❌ Unknown difficulty '{difficulty}', skipping file")
+                return False
 
+            # Create safe filename
             safe_title = re.sub(r'[^\\w\\s-]', '', problem_info['title']).replace(' ', '_')
-            # Limit title length to avoid very long filenames
             if len(safe_title) > 50:
                 safe_title = safe_title[:50].rstrip('_')
-
-            safe_title = re.sub(r'[^\w\s-]', '', problem_info['title']).replace(' ', '_')
+            
             target_filename = f"{problem_info['id']}_{safe_title}.cpp"
             target_path = target_dir / target_filename
 
+            # Copy file to appropriate difficulty folder
             if not target_path.exists():
                 shutil.copy2(file_path, target_path)
-                print(f"✅ Copied to: {target_path.relative_to(self.repo_path)}")
-                print(f"📋 Original kept: {file_path.relative_to(self.repo_path)}")
+                print(f"✅ Copied to: {difficulty} folder → {target_filename}")
                 return True
             else:
-                print(f"⚠️  Already exists: {target_filename}")
-                print(f"📋 Original kept: {file_path.relative_to(self.repo_path)}")
+                print(f"⚠️ File already exists: {target_filename}")
                 return False
 
         except Exception as e:
-            print(f"Error processing {file_path.name}: {e}")
+            print(f"❌ Error processing {file_path.name}: {e}")
             return False
 
     def find_existing_problem(self, problem_id: str) -> Optional[Path]:
-        """Check if a problem with the given ID already exists in any difficulty folder"""
+        """Check if a problem with the given ID already exists"""
         for folder in [self.easy_path, self.medium_path, self.hard_path]:
             if folder.exists():
                 for existing_file in folder.glob(f"{problem_id}_*.cpp"):
                     return existing_file
-                # Also check for files that start with the problem ID
-                for existing_file in folder.glob("*.cpp"):
-                    if existing_file.name.startswith(f"{problem_id}_"):
-                        return existing_file
         return None
 
-    def cleanup_duplicates(self):
-        """Remove duplicate files based on problem ID"""
-        print("\n🧹 Checking for duplicate files...")
-
-        problem_files = {}  # problem_id -> list of files
-
-        # Collect all files by problem ID
-        for folder in [self.easy_path, self.medium_path, self.hard_path]:
-            if folder.exists():
-                for file_path in folder.glob("*.cpp"):
-                    # Extract problem ID from filename
-                    match = re.match(r'^(\d+)_', file_path.name)
-                    if match:
-                        problem_id = match.group(1)
-                        if problem_id not in problem_files:
-                            problem_files[problem_id] = []
-                        problem_files[problem_id].append(file_path)
-
-        # Find and remove duplicates
-        duplicates_removed = 0
-        for problem_id, files in problem_files.items():
-            if len(files) > 1:
-                print(f"\n📋 Problem #{problem_id} has {len(files)} copies:")
-                for i, file_path in enumerate(files):
-                    print(f"   {i+1}. {file_path.relative_to(self.repo_path)}")
-
-                # Keep the one with the shortest, most standard filename
-                files_sorted = sorted(files, key=lambda f: (len(f.name), f.name))
-                keep_file = files_sorted[0]
-
-                print(f"   ✅ Keeping: {keep_file.relative_to(self.repo_path)}")
-
-                # Remove duplicates
-                for file_path in files[1:]:
-                    if file_path != keep_file:
-                        print(f"   🗑️  Removing: {file_path.relative_to(self.repo_path)}")
-                        file_path.unlink()
-                        duplicates_removed += 1
-
-        if duplicates_removed > 0:
-            print(f"\n✅ Removed {duplicates_removed} duplicate files")
-        else:
-            print("\n✅ No duplicates found")
-
     def organize_all(self):
-        """Organize files in Daily Questions"""
-        if self.auto_mode:
-            print("🤖 Starting Automated LeetCode Organization...")
-            print("📁 Processing all files in Daily Questions folder...")
-            print("📋 Note: Files will be COPIED to difficulty folders (originals kept in Daily Questions)")
-        else:
-            print("🚀 Starting AI-Powered LeetCode Organization...")
-            print("🕐 Only processing files modified in the last 24 hours...")
-            print("📋 Note: Files will be COPIED to difficulty folders (originals kept in Daily Questions)")
+        """Organize all files in Daily Questions folder"""
+        print("🚀 Starting Improved LeetCode Organization...")
+        print("📋 Extracting problem info from commit messages")
+        print("🔍 Using LeetCode API for accurate difficulty detection")
+        print("🚫 NO cache files will be created")
 
-        sorted_files = self.sort_daily_files()
-
-        if not sorted_files:
-            if self.auto_mode:
-                print("ℹ️  No files found in Daily Questions folder.")
-            else:
-                print("ℹ️  No files modified in the last 24 hours. Nothing to process.")
+        # Get all cpp files in Daily Questions
+        cpp_files = list(self.daily_path.glob("*.cpp"))
+        
+        if not cpp_files:
+            print("\n⚠️ No .cpp files found in Daily Questions folder")
             return
 
-        if self.auto_mode:
-            print(f"📁 Found {len(sorted_files)} files to process:")
-            for file_path in sorted_files:
-                date = self.parse_date_from_filename(file_path.name)
-                print(f"   {file_path.name} - {date.strftime('%d/%m/%Y')}")
-        else:
-            print(f"📅 Found {len(sorted_files)} recent files (modified in last 24h):")
-            current_time = time.time()
-            for file_path in sorted_files:
-                date = self.parse_date_from_filename(file_path.name)
-                hours_ago = (current_time - file_path.stat().st_mtime) / 3600
-                print(f"   {file_path.name} - {date.strftime('%d/%m/%Y')} (modified {hours_ago:.1f}h ago)")
-
-        print("\n" + "="*50)
+        print(f"\n📁 Found {len(cpp_files)} files to process")
 
         organized = 0
-        for file_path in sorted_files:
+        for file_path in cpp_files:
             if self.organize_file(file_path):
                 organized += 1
-            print()
 
-        print(f"✅ Organization complete! {organized} files copied to difficulty folders.")
-        print(f"📋 Original files remain in Daily Questions folder with their original names.")
+        print(f"\n🎉 Organization complete!")
+        print(f"✅ Successfully organized: {organized} files")
+        print(f"📋 Total files processed: {len(cpp_files)}")
 
-        # Clean up any duplicates that might exist
-        self.cleanup_duplicates()
-
+        # Show final distribution
         easy_count = len(list(self.easy_path.glob("*.cpp")))
-        medium_count = len(list(self.medium_path.glob("*.cpp")))
+        medium_count = len(list(self.medium_path.glob("*.cpp")))  
         hard_count = len(list(self.hard_path.glob("*.cpp")))
 
-        print(f"📊 Current distribution:")
-        print(f"   Easy: {easy_count} problems")
-        print(f"   Medium: {medium_count} problems")
-        print(f"   Hard: {hard_count} problems")
-        print(f"   Total: {easy_count + medium_count + hard_count} problems")
+        print(f"\n📊 Final distribution:")
+        print(f"   🟢 Easy: {easy_count} problems")
+        print(f"   🟡 Medium: {medium_count} problems")
+        print(f"   🔴 Hard: {hard_count} problems")
+        print(f"   📈 Total: {easy_count + medium_count + hard_count} problems")
 
 if __name__ == "__main__":
     import sys
     import argparse
     
-    parser = argparse.ArgumentParser(description='LeetCode Repository Organizer')
+    parser = argparse.ArgumentParser(description='Improved LeetCode Repository Organizer')
     parser.add_argument('repo_path', nargs='?', default='.', help='Path to the repository')
     parser.add_argument('--auto-mode', action='store_true', 
-                       help='Process all files in Daily Questions folder (not just recent ones)')
+                       help='Process all files (for testing)')
     
     args = parser.parse_args()
     
-    organizer = SimpleLeetCodeOrganizer(args.repo_path, auto_mode=args.auto_mode)
+    organizer = ImprovedLeetCodeOrganizer(args.repo_path, auto_mode=args.auto_mode)
     organizer.organize_all()
